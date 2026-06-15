@@ -22,7 +22,7 @@ let package = Package(
         .binaryTarget(
             name: "Othento",
             url: "https://github.com/Othento/ios-sdk/releases/download/0.1.0/Othento.xcframework.zip",
-            checksum: "e131eed0cdc07763ee7bb1a17b0760789cb6c08e5362afdf68f2ff919ce647b6"
+            checksum: "0824e66599462d64ef6066f9938f55bd726eb655070f717faa8d2a0e62205a41"
         ),
     ]
 )
