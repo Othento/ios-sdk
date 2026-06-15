@@ -70,7 +70,6 @@ terminates the app when the SDK opens the camera:
 ```
 
 Notes:
-- **No microphone key is required** — capture is video-only, without audio.
 - **No photo-library key is required** — the optional "upload from library"
   fallback uses the system image picker, which runs out-of-process.
 - The SDK requests camera access **at the moment of first capture** and shows an
