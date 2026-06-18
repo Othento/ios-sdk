@@ -8,7 +8,7 @@ verification, and hands you a typed decision (`Approved` / `Declined` /
 `InReview`). The API surface mirrors the Othento web and Android SDKs 1:1, so
 error codes, session statuses, and webhook payloads line up across platforms.
 
-- **Swift Package:** `https://github.com/Othento/ios-sdk` · pin `0.1.0`
+- **Swift Package:** `https://github.com/Othento/ios-sdk` · pin `0.1.1`
 - **Min iOS:** 15.0 · **Xcode:** 15+ · **Swift:** 5.9+
 - **UI:** renders with SwiftUI internally — your app can be **UIKit or SwiftUI**.
 - **Distribution:** a prebuilt, self-contained `XCFramework`. **No transitive
@@ -85,13 +85,13 @@ Notes:
 ### Swift Package Manager (recommended)
 
 In Xcode: **File ▸ Add Package Dependencies…**, enter
-`https://github.com/Othento/ios-sdk`, and pin to **Exact Version `0.1.0`**.
+`https://github.com/Othento/ios-sdk`, and pin to **Exact Version `0.1.1`**.
 
 Or in a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Othento/ios-sdk", from: "0.1.0"),
+    .package(url: "https://github.com/Othento/ios-sdk", from: "0.1.1"),
 ],
 targets: [
     .target(
@@ -107,7 +107,7 @@ against the manifest's SHA-256 checksum at resolution time.
 ### CocoaPods
 
 ```ruby
-pod 'Othento', '~> 0.1.0'
+pod 'Othento', '~> 0.1.1'
 ```
 
 ---
@@ -452,7 +452,7 @@ production.**
 
 ## Support
 
-Include the SDK version (`0.1.0`), the `externalId` of the affected session, and
+Include the SDK version (`0.1.1`), the `externalId` of the affected session, and
 a console capture when contacting your account manager or opening a ticket.
 
 ---
