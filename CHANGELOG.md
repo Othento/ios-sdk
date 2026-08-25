@@ -113,8 +113,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The CocoaPods spec therefore stays at **0.1.1** for this release. There is no
   `0.2.0` pod.
 
-- App size grows for SPM integrators — see the release notes for the measured
-  delta.
+- **The artifact is substantially larger for SPM integrators.** Rekognition
+  statically links the AWS Amplify stack: the device slice binary goes from
+  **4.5 MiB to 25.2 MiB** (+20.7 MiB), and the release zip from 5.9 MiB to
+  26.3 MiB. That is the unstripped framework, not your app's growth — the
+  linker dead-strips and the App Store thins per-device — but measure it with
+  an App Store size report if binary size is a constraint.
 
 ## [0.1.1] - 2026-06-18
 
