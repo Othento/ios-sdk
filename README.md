@@ -11,8 +11,11 @@ error codes, session statuses, and webhook payloads line up across platforms.
 - **Swift Package:** `https://github.com/Othento/ios-sdk` · pin `0.1.1`
 - **Min iOS:** 15.0 · **Xcode:** 15+ · **Swift:** 5.9+
 - **UI:** renders with SwiftUI internally — your app can be **UIKit or SwiftUI**.
-- **Distribution:** a prebuilt, self-contained `XCFramework`. **No transitive
-  dependencies** — `import Othento` is all you need.
+- **Distribution:** a prebuilt `XCFramework`. You add **one** package and
+  `import Othento`; SPM resolves the two AWS packages behind Face Liveness for
+  you (see [Install](#install)).
+- **Copy, branding and language are served by your backend** — see
+  [Localisation & branding](#localisation--branding).
 
 ---
 
@@ -21,20 +24,22 @@ error codes, session statuses, and webhook payloads line up across platforms.
 1. [Requirements](#requirements)
 2. [Permissions](#permissions)
 3. [Install](#install)
-4. [Quick start](#quick-start)
-5. [Complete example](#complete-example)
-6. [Configuration reference](#configuration-reference)
-7. [Presenting & dismissing](#presenting--dismissing)
-8. [Lifecycle & callbacks](#lifecycle--callbacks)
-9. [Result type](#result-type)
-10. [Status & decision values](#status--decision-values)
-11. [Error codes](#error-codes)
-12. [Cancellation reasons](#cancellation-reasons)
-13. [Testing your integration](#testing-your-integration)
-14. [Troubleshooting](#troubleshooting)
-15. [Versioning](#versioning)
-16. [Support](#support)
-17. [License](#license)
+4. [AWS Rekognition Face Liveness](#aws-rekognition-face-liveness)
+5. [Localisation & branding](#localisation--branding)
+6. [Quick start](#quick-start)
+7. [Complete example](#complete-example)
+8. [Configuration reference](#configuration-reference)
+9. [Presenting & dismissing](#presenting--dismissing)
+10. [Lifecycle & callbacks](#lifecycle--callbacks)
+11. [Result type](#result-type)
+12. [Status & decision values](#status--decision-values)
+13. [Error codes](#error-codes)
+14. [Cancellation reasons](#cancellation-reasons)
+15. [Testing your integration](#testing-your-integration)
+16. [Troubleshooting](#troubleshooting)
+17. [Versioning](#versioning)
+18. [Support](#support)
+19. [License](#license)
 
 ---
 
@@ -47,6 +52,12 @@ Before wiring the SDK in, make sure you have:
 - A **public API key** (`pk_sandbox_…` or `pk_live_…`). Sandbox keys hit the
   test environment; live keys bill against your plan. **There is no environment
   flag** — the key decides. See [Sandbox vs production](#sandbox-vs-production).
+- A backend serving **`GET /api/v1/SdkContent`**. From 0.2.0 the SDK renders no
+  built-in copy — all text, colours, fonts and imagery arrive from this
+  endpoint, and the flow will not start without it. The standard Othento
+  backend already provides it; if you self-host, **upgrade the backend before
+  shipping this SDK version**. See
+  [Localisation & branding](#localisation--branding).
 
 | Setting | Value |
 |---|---|
@@ -70,6 +81,7 @@ terminates the app when the SDK opens the camera:
 ```
 
 Notes:
+- **No microphone key is required** — capture is video-only, without audio.
 - **No photo-library key is required** — the optional "upload from library"
   fallback uses the system image picker, which runs out-of-process.
 - The SDK requests camera access **at the moment of first capture** and shows an
@@ -104,11 +116,130 @@ targets: [
 SPM downloads the prebuilt XCFramework from the GitHub Release and verifies it
 against the manifest's SHA-256 checksum at resolution time.
 
+You add one package. SPM then resolves two transitive AWS packages
+(`amplify-ui-swift-liveness` and `amplify-swift`), which the SDK needs for
+Rekognition Face Liveness — see below. **The first resolve is slow**; Amplify is
+a large repository.
+
 ### CocoaPods
 
 ```ruby
 pod 'Othento', '~> 0.1.1'
 ```
+
+> **CocoaPods does not support AWS Rekognition Face Liveness.** See
+> [Face Liveness](#aws-rekognition-face-liveness) below.
+
+> **The pod lags the Swift Package on purpose.** `amplify-ui-swift-liveness`
+> publishes no podspec, so releases that depend on it cannot ship to CocoaPods
+> and the spec stays at the last version that could — currently **0.1.1**. The
+> Swift Package is the complete, current artifact; the pod is a
+> compatibility path for existing integrations. **New integrations should use
+> SPM.**
+
+---
+
+## AWS Rekognition Face Liveness
+
+If your workflow's `face_liveness_method` is `rekognition_light` or
+`rekognition_movement`, the SDK runs an **active** liveness challenge using
+AWS's Face Liveness component instead of the passive video check.
+
+**You do not configure anything.** There is no AWS account to connect, no
+Cognito Identity Pool, no keys or identifiers to embed. The SDK renders its own
+branded intro (plus a photosensitivity warning before the light challenge), and
+the challenge streams to AWS using short-lived credentials your backend vends
+per attempt. The pass/fail decision stays server-side.
+
+**Requirements**
+
+- **Swift Package Manager.** Not available via CocoaPods (below).
+- `NSCameraUsageDescription` in your `Info.plist` — the same key the document
+  and selfie capture screens already require. No new permission, but **update
+  the wording**: the camera is now also used for a liveness check, and App
+  Review checks purpose strings against actual behaviour. Something like:
+  *"Used to photograph your identity document and to record a short liveness
+  check confirming it's really you."*
+- **Privacy declarations.** The SDK ships its own `PrivacyInfo.xcprivacy`
+  declaring what it transmits (biometric/face data as *Sensitive Info*, photos
+  and videos, and OTP email/phone when those steps are enabled). Apple
+  aggregates that with your app's manifest, but **App Store privacy labels are
+  set per-app** — your submission must declare the same categories, and must
+  match whatever your backend retains.
+- **Export compliance.** The liveness path links s2n-tls / aws-lc for TLS
+  transport only. Standard cryptography, so the usual Category 5 Part 2
+  exemption applies — set `ITSAppUsesNonExemptEncryption` deliberately rather
+  than answering the TestFlight prompt each upload.
+- Your backend must expose
+  `GET /api/v1/SessionToken/session/liveness/rekognition/credentials`. If you
+  run the standard Othento backend this is already in place.
+
+**Behaviour**
+
+- The user gets up to **3 attempts**. Closing the check (×) returns to the
+  intro without consuming the step.
+- The AWS challenge screen's layout is fixed by AWS. The SDK brands the intro;
+  the challenge itself is not themeable beyond what AWS exposes.
+
+### CocoaPods limitation
+
+`amplify-ui-swift-liveness` publishes no podspec
+([#110](https://github.com/aws-amplify/amplify-ui-swift-liveness/issues/110)),
+so the CocoaPods build of Othento ships without it. If a Rekognition workflow
+reaches a CocoaPods integration, the user sees the SDK's **"Update Required"**
+screen rather than the challenge. Document capture, passive liveness and OTP
+are unaffected.
+
+**If your workflows use Rekognition liveness, integrate via SPM.**
+
+---
+
+## Localisation & branding
+
+From **0.2.0** the verification UI carries no built-in copy or theme. On
+launch the SDK calls `GET /api/v1/SdkContent` once and renders what your tenant
+configuration returns: every string, colour, font and image.
+
+**What this means for you**
+
+- **Nothing to configure in the app.** Text and theme are managed from your
+  dashboard, and changes take effect without shipping a new build.
+- **A short loading screen precedes the first verification screen** while that
+  request is in flight. The close button is live throughout, so the user is
+  never trapped.
+- **The tenant theme wins.** Colours, fonts and logos resolve from the tenant
+  configuration; there is no host-app override.
+- **This endpoint is required.** If it cannot be reached, or returns nothing
+  usable, the flow ends on an error screen — the SDK does not fall back to
+  built-in English. Upgrade your backend before shipping 0.2.0.
+
+### Choosing a language
+
+Pass a BCP-47 code to the builder:
+
+```swift
+let config = try OthentoConfig.Builder()
+    .create(workflowExternalId: "wf_…", clientData: "user-123")
+    .apiKey("pk_sandbox_…")
+    .language("ar")          // optional
+    .build()
+```
+
+- **Optional.** Omit it and the tenant default is used — the behaviour every
+  integration had before 0.2.0.
+- **Create mode only.** In token mode the session already carries its own
+  language, minted by your backend, and this value is ignored.
+- **The backend decides.** Request a language your tenant has no content for
+  and it resolves to the tenant default. The SDK renders what came back, not
+  what was asked for.
+- **RTL is automatic.** When the resolved language is right-to-left (Arabic,
+  for example) the whole flow mirrors — navigation, alignment and progress
+  direction. You do nothing.
+
+> Matching the SDK to your app's language: pass
+> `Locale.current.language.languageCode?.identifier` (iOS 16+) or
+> `Locale.current.languageCode` — but only if your tenant has content for the
+> languages your app supports, since anything else falls back to the default.
 
 ---
 
@@ -251,6 +382,7 @@ Build an `OthentoConfig` with the fluent `Builder`. Configuration is validated
 | `callbackReceiver(_:)` | optional | Which webhook the platform invokes: `.initiator` / `.completer` / `.both`. |
 | `metadata(_:)` | optional | Free-form string round-tripped on session events / webhooks. |
 | `expectedDetails(_:)` | optional | Identity hints cross-checked against extracted data (see below). |
+| `language(_:)` | optional | BCP-47 UI language, e.g. `"en"` / `"ar"`. **Create mode only** — ignored in token mode. Omit for the tenant default. See [Localisation & branding](#localisation--branding). |
 
 ```swift
 // Token mode — when your backend creates the session and mints a token:

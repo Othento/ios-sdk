@@ -1,0 +1,156 @@
+# Changelog
+
+All notable changes to the Othento iOS SDK are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0] - 2026-08-25
+
+### Added
+
+- **Backend-driven content, branding and localisation.** Every string, colour,
+  font and image in the verification UI now comes from your tenant
+  configuration instead of being compiled into the SDK. The SDK fetches it once
+  at launch from `GET /api/v1/SdkContent` and renders what comes back.
+
+  Practical consequences:
+  - **Your backend must serve this endpoint.** It is not optional — the SDK
+    blocks its first paint on the response, and a session whose content cannot
+    be loaded ends on an error screen rather than falling back to built-in
+    English copy. If you run the standard Othento backend this is already in
+    place; if you self-host, upgrade the backend *before* shipping this SDK
+    version.
+  - **The tenant theme now wins over host-app branding.** Colours, fonts and
+    logos resolve from the tenant configuration returned with the content.
+  - **A brief loading screen precedes the first verification screen** while
+    that fetch is in flight. The close button is available throughout.
+
+- **Right-to-left layout.** Arabic and other RTL languages lay out correctly —
+  mirrored navigation, alignment and progress direction — driven by the
+  language the content resolves to.
+
+- **`language(_:)` on `OthentoConfig.Builder`.** A BCP-47 code (`"en"`, `"ar"`)
+  selecting the verification UI language.
+
+  ```swift
+  let config = try OthentoConfig.Builder()
+      .create(workflowExternalId: "wf_…", clientData: "user-123")
+      .apiKey("pk_sandbox_…")
+      .language("ar")
+      .build()
+  ```
+
+  Additive and optional — omit it and you get the tenant default, which is
+  exactly what every existing integration already gets. **Create mode only:**
+  in token mode the session already carries its own language and the field is
+  ignored. The backend has the final say; ask for a language the tenant has no
+  content for and it resolves to the tenant default.
+
+- **AWS Rekognition Face Liveness**, as an opt-in alternative to the existing
+  passive liveness-video check. A workflow configured for `rekognition_light`
+  or `rekognition_movement` now runs an active liveness challenge. The SDK
+  renders its own branded intro (and a photosensitivity warning before the
+  light challenge); the challenge itself is AWS's component. Credentials are
+  short-lived STS credentials vended per attempt by your backend — the SDK
+  embeds no AWS identifier beyond the region. Up to 3 attempts; the backend
+  still owns the pass/fail decision.
+
+- **"Update Required" screen.** A session that asks for a verification step
+  this build cannot render now shows an explicit dead-end instead of silently
+  routing the user into the wrong capture screen.
+
+- **Searchable country and document pickers.** The country and document-type
+  lists are now type-to-filter, matching on country name and dialling code.
+  Previously they were a plain scroll — unusable at ~200 entries.
+
+- **`rekognitionLiveness` fixture scenario**, for exercising the Rekognition
+  intro and photosensitivity screens without a backend. The AWS challenge
+  itself still needs a real one.
+
+### Changed
+
+- **SPM integrators now resolve two transitive packages.** `Othento` depends on
+  `aws-amplify/amplify-ui-swift-liveness` (pinned exactly `1.4.0`) and
+  `aws-amplify/amplify-swift` (pinned exactly `2.49.0`). You still add a single
+  package in Xcode; SPM resolves the rest. The first resolve is slow — Amplify
+  is a large graph.
+
+  These pins are deliberately **not** the newest. Liveness `1.4.5` /
+  amplify-swift `2.58.5` use `@preconcurrency` on a protocol conformance, which
+  is Swift 6 syntax and requires Xcode 16 (and so macOS 14.5+). The pinned pair
+  builds on Swift 5.10 and exposes an identical error set, keeping the SDK
+  consumable on Xcode 15.4.
+
+- **The wait for a verification decision is now 16 seconds, up from 10.** A
+  timeout here is not neutral: it routes the session to the terminal
+  "Verification under review" result, so a session seconds away from a real
+  verdict was landing in a manual-review queue instead. The extra time comes
+  from polling more often over the same cadence, so verdicts that arrive
+  quickly are not delayed.
+
+- Unknown challenge types are now decoded to an explicit sentinel. Previously
+  they fell back to `DocumentFront`, which dropped the user into ID capture.
+
+### Fixed
+
+- **OTP no longer strands the user when a late verdict lands mid-send.** If the
+  ID step's asynchronous processing returned a retryable failure while an OTP
+  code was being sent, the session moved past the OTP step but the UI stayed on
+  it, leaving a dead screen with no way forward. Such a session is now routed
+  through the normal resolver.
+
+### Known limitations
+
+- **CocoaPods does not carry Rekognition liveness.**
+  `amplify-ui-swift-liveness` publishes no podspec
+  ([#110](https://github.com/aws-amplify/amplify-ui-swift-liveness/issues/110)),
+  so the CocoaPods artifact is built without it. A Rekognition workflow reaching
+  a CocoaPods integrator lands on the "Update Required" screen. Passive
+  liveness, document capture and OTP are unaffected. **Use SPM if your
+  workflows use Rekognition liveness.**
+
+  The CocoaPods spec therefore stays at **0.1.1** for this release. There is no
+  `0.2.0` pod.
+
+- App size grows for SPM integrators — see the release notes for the measured
+  delta.
+
+## [0.1.1] - 2026-06-18
+
+### Fixed
+
+- **Binary consumers can now `import Othento`.** PhoneNumberKit is no longer
+  exposed in the framework's public Swift interface. Under
+  `BUILD_LIBRARY_FOR_DISTRIBUTION` the leaked import made the XCFramework
+  unbuildable for SPM and CocoaPods consumers, failing with
+  `no such module 'PhoneNumberKit'`. PhoneNumberKit stays statically linked and
+  fully internal, so consumers still declare no transitive dependencies.
+- **OTP entry no longer overflows on narrow screens.** Code cells now size to
+  the available width, so longer codes (8–10 digits) fit without clipping or
+  horizontal overflow; shorter codes still render at the full design size.
+- **Camera and torch are suspended during upload.** When a captured document or
+  selfie is uploading, the live camera session and torch are now paused instead
+  of continuing to run behind the upload overlay, and rebind cleanly if the flow
+  returns to the capture screen.
+
+### Build
+
+- The XCFramework release build now fails if any third-party module leaks into a
+  public `.swiftinterface`, preventing a recurrence of the binary-distribution
+  break above.
+
+## [0.1.0] - 2026-06-14
+
+### Added
+
+- Initial public release of the Othento identity-verification SDK for iOS.
+- Distributed as a self-contained binary `Othento.xcframework` via Swift Package
+  Manager and CocoaPods; statically links and embeds PhoneNumberKit so
+  consumers declare no transitive dependencies — `import Othento` is all that is
+  required.
+- Minimum deployment target: iOS 15.
+
+[0.2.0]: https://github.com/Othento/ios-sdk/releases/tag/0.2.0
+[0.1.1]: https://github.com/Othento/ios-sdk/releases/tag/0.1.1
+[0.1.0]: https://github.com/Othento/ios-sdk/releases/tag/0.1.0
