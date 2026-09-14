@@ -5,6 +5,23 @@ All notable changes to the Othento iOS SDK are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-09-14
+
+### Changed
+
+- **Production backend.** The SDK now connects to `https://sdk-api.othento.com`.
+  If your app or network restricts outbound hosts, allow this domain. No code
+  changes are required; sandbox vs. live is still decided by your API key.
+
+### Documentation
+
+- **`OthentoExpectedDetails` field formats.** The README now documents what to
+  send for every field — `dateOfBirth` as `yyyy-MM-dd`, `gender` as `"M"` /
+  `"F"`, `nationality` and `country` as ISO 3166-1 alpha-3 codes, and
+  `ipAddress` as the expected end-user IPv4 address. The same guidance appears
+  in Xcode Quick Help. Values in any other format will not match the extracted
+  data.
+
 ## [0.2.0] - 2026-08-25
 
 ### Added
@@ -155,6 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   required.
 - Minimum deployment target: iOS 15.
 
+[0.2.1]: https://github.com/Othento/ios-sdk/releases/tag/0.2.1
 [0.2.0]: https://github.com/Othento/ios-sdk/releases/tag/0.2.0
 [0.1.1]: https://github.com/Othento/ios-sdk/releases/tag/0.1.1
 [0.1.0]: https://github.com/Othento/ios-sdk/releases/tag/0.1.0

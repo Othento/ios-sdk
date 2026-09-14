@@ -394,21 +394,38 @@ let config = try OthentoConfig.Builder()
 ### `OthentoExpectedDetails`
 
 All fields optional — send only what you already know. The backend cross-checks
-them against the data extracted from the document / selfie.
+them against the data extracted from the document / selfie, so **send each value
+in the exact format below**: a correct value in the wrong format (e.g. a date as
+`"01/01/1988"`, or `"Jordan"` instead of `"JOR"`) will not match.
 
 ```swift
 OthentoExpectedDetails(
-    firstName: nil,
-    lastName: nil,
-    dateOfBirth: nil,   // ISO-8601, e.g. "1990-04-23"
-    gender: nil,
-    nationality: nil,
-    country: nil,
-    address: nil,
-    documentNumber: nil,
-    ipAddress: nil
+    firstName: "Ahmad",
+    lastName: "Khalil",
+    dateOfBirth: "1988-01-01",   // must be yyyy-MM-dd
+    gender: "M",                 // "M" or "F"
+    nationality: "JOR",          // ISO 3166-1 alpha-3
+    country: "JOR",              // ISO 3166-1 alpha-3
+    address: "Amman, Jordan",
+    documentNumber: "A1234567",
+    ipAddress: "203.0.113.24"    // expected end-user IPv4
 )
 ```
+
+| Field | Type | What to send | Example |
+|---|---|---|---|
+| `firstName` | `String?` | The person's first (given) name, as written on their identity document. | `"Ahmad"` |
+| `lastName` | `String?` | The person's last (family) name, as written on their identity document. | `"Khalil"` |
+| `dateOfBirth` | `String?` | Date of birth. **Must be `yyyy-MM-dd`**: 4-digit year, 2-digit month, 2-digit day, zero-padded, no time or timezone. | `"1988-01-01"` |
+| `gender` | `String?` | **`"M"` or `"F"`** only: one uppercase letter. Do not send `"Male"`, `"female"`, etc. | `"M"` |
+| `nationality` | `String?` | The person's nationality as an **ISO 3166-1 alpha-3** country code (3 uppercase letters). | `"JOR"` |
+| `country` | `String?` | Country as an **ISO 3166-1 alpha-3** country code (3 uppercase letters). Not a country name or a 2-letter code. | `"JOR"` |
+| `address` | `String?` | The person's address as free text. | `"Amman, Jordan"` |
+| `documentNumber` | `String?` | The identity document number (passport, national ID, …) exactly as printed, without spaces or dashes you added yourself. | `"A1234567"` |
+| `ipAddress` | `String?` | The **IPv4** address you expect the end user's device to connect from, in dotted-decimal form. Send the user's public IP, not your server's. | `"203.0.113.24"` |
+
+Leave a field `nil` rather than sending an empty string or a placeholder such as
+`"N/A"`.
 
 ---
 
