@@ -17,6 +17,9 @@ error codes, session statuses, and webhook payloads line up across platforms.
 - **Copy, branding and language are served by your backend** — see
   [Localisation & branding](#localisation--branding).
 
+> **Versions earlier than 0.2.1 have been withdrawn** and can no longer be
+> resolved. Pin **0.2.1 or later**.
+
 ---
 
 ## Contents
@@ -123,19 +126,8 @@ a large repository.
 
 ### CocoaPods
 
-```ruby
-pod 'Othento', '~> 0.1.1'
-```
-
-> **CocoaPods does not support AWS Rekognition Face Liveness.** See
-> [Face Liveness](#aws-rekognition-face-liveness) below.
-
-> **The pod lags the Swift Package on purpose.** `amplify-ui-swift-liveness`
-> publishes no podspec, so releases that depend on it cannot ship to CocoaPods
-> and the spec stays at the last version that could — currently **0.1.1**. The
-> Swift Package is the complete, current artifact; the pod is a
-> compatibility path for existing integrations. **New integrations should use
-> SPM.**
+CocoaPods is **not available**. The previously documented pod has been
+withdrawn. Integrate via Swift Package Manager (above).
 
 ---
 
@@ -153,7 +145,7 @@ per attempt. The pass/fail decision stays server-side.
 
 **Requirements**
 
-- **Swift Package Manager.** Not available via CocoaPods (below).
+- **Swift Package Manager** — the only supported install method.
 - `NSCameraUsageDescription` in your `Info.plist` — the same key the document
   and selfie capture screens already require. No new permission, but **update
   the wording**: the camera is now also used for a liveness check, and App
@@ -180,17 +172,6 @@ per attempt. The pass/fail decision stays server-side.
   intro without consuming the step.
 - The AWS challenge screen's layout is fixed by AWS. The SDK brands the intro;
   the challenge itself is not themeable beyond what AWS exposes.
-
-### CocoaPods limitation
-
-`amplify-ui-swift-liveness` publishes no podspec
-([#110](https://github.com/aws-amplify/amplify-ui-swift-liveness/issues/110)),
-so the CocoaPods build of Othento ships without it. If a Rekognition workflow
-reaches a CocoaPods integration, the user sees the SDK's **"Update Required"**
-screen rather than the challenge. Document capture, passive liveness and OTP
-are unaffected.
-
-**If your workflows use Rekognition liveness, integrate via SPM.**
 
 ---
 

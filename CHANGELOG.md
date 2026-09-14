@@ -22,7 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in Xcode Quick Help. Values in any other format will not match the extracted
   data.
 
-## [0.2.0] - 2026-08-25
+### Removed
+
+- **Versions 0.1.0, 0.1.1 and 0.2.0 have been withdrawn.** Those builds
+  connected to a development backend and must not be used. Their GitHub
+  releases and tags were deleted, so they can no longer be resolved. Upgrade to
+  0.2.1 or later.
+
+## [0.2.0] - 2026-08-25 [YANKED]
 
 ### Added
 
@@ -137,7 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   linker dead-strips and the App Store thins per-device — but measure it with
   an App Store size report if binary size is a constraint.
 
-## [0.1.1] - 2026-06-18
+## [0.1.1] - 2026-06-18 [YANKED]
 
 ### Fixed
 
@@ -161,7 +168,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   public `.swiftinterface`, preventing a recurrence of the binary-distribution
   break above.
 
-## [0.1.0] - 2026-06-14
+## [0.1.0] - 2026-06-14 [YANKED]
 
 ### Added
 
@@ -173,6 +180,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minimum deployment target: iOS 15.
 
 [0.2.1]: https://github.com/Othento/ios-sdk/releases/tag/0.2.1
-[0.2.0]: https://github.com/Othento/ios-sdk/releases/tag/0.2.0
-[0.1.1]: https://github.com/Othento/ios-sdk/releases/tag/0.1.1
-[0.1.0]: https://github.com/Othento/ios-sdk/releases/tag/0.1.0
