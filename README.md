@@ -25,24 +25,26 @@ error codes, session statuses, and webhook payloads line up across platforms.
 ## Contents
 
 1. [Requirements](#requirements)
-2. [Permissions](#permissions)
-3. [Install](#install)
-4. [AWS Rekognition Face Liveness](#aws-rekognition-face-liveness)
-5. [Localisation & branding](#localisation--branding)
-6. [Quick start](#quick-start)
-7. [Complete example](#complete-example)
-8. [Configuration reference](#configuration-reference)
-9. [Presenting & dismissing](#presenting--dismissing)
-10. [Lifecycle & callbacks](#lifecycle--callbacks)
-11. [Result type](#result-type)
-12. [Status & decision values](#status--decision-values)
-13. [Error codes](#error-codes)
-14. [Cancellation reasons](#cancellation-reasons)
-15. [Testing your integration](#testing-your-integration)
-16. [Troubleshooting](#troubleshooting)
-17. [Versioning](#versioning)
-18. [Support](#support)
-19. [License](#license)
+2. [How it works](#how-it-works)
+3. [Permissions](#permissions)
+4. [Install](#install)
+5. [AWS Rekognition Face Liveness](#aws-rekognition-face-liveness)
+6. [Localisation & branding](#localisation--branding)
+7. [Step 1 — Create a session on your server](#step-1--create-a-session-on-your-server)
+8. [Step 2 — Start the SDK in your app](#step-2--start-the-sdk-in-your-app)
+9. [Complete example](#complete-example)
+10. [Configuration reference](#configuration-reference)
+11. [Presenting & dismissing](#presenting--dismissing)
+12. [Lifecycle & callbacks](#lifecycle--callbacks)
+13. [Result type](#result-type)
+14. [Status & decision values](#status--decision-values)
+15. [Error codes](#error-codes)
+16. [Cancellation reasons](#cancellation-reasons)
+17. [Testing your integration](#testing-your-integration)
+18. [Troubleshooting](#troubleshooting)
+19. [Versioning](#versioning)
+20. [Support](#support)
+21. [License](#license)
 
 ---
 
@@ -52,9 +54,13 @@ Before wiring the SDK in, make sure you have:
 
 - A **partner account** on the Othento platform with at least one **workflow**
   configured. Workflow IDs are issued from your dashboard.
-- A **public API key** (`pk_sandbox_…` or `pk_live_…`). Sandbox keys hit the
-  test environment; live keys bill against your plan. **There is no environment
-  flag** — the key decides. See [Sandbox vs production](#sandbox-vs-production).
+- Your application's **API key** from the dashboard. It stays on **your
+  server** — never embed it in the app, where anyone can extract it from the
+  binary. Sandbox and live keys decide the environment; see
+  [Sandbox vs production](#sandbox-vs-production).
+- A **server endpoint** of your own that creates a verification session and
+  returns its session access token to the app. See
+  [Step 1](#step-1--create-a-session-on-your-server).
 - A backend serving **`GET /api/v1/SdkContent`**. From 0.2.0 the SDK renders no
   built-in copy — all text, colours, fonts and imagery arrive from this
   endpoint, and the flow will not start without it. The standard Othento
@@ -70,6 +76,38 @@ Before wiring the SDK in, make sure you have:
 | Architectures | `arm64` (device), `arm64` + `x86_64` (simulator) |
 
 If you don't have credentials yet, contact your account manager to be onboarded.
+
+---
+
+## How it works
+
+```
+ Your app                   Your server                    Othento API
+ ────────                   ───────────                    ───────────
+ user taps "Verify" ────▶  POST /your/verify-session
+                           (user is authenticated)
+                                    │
+                                    ├──▶ POST /api/v1/SessionToken/session
+                                    │    X-API-KEY: <your API key>
+                                    │◀── { externalId, sessionToken: "sat:…" }
+                                    │
+                           save externalId on the user
+ receive { sat } ◀─────────  return { sat }
+
+ OthentoConfig.Builder().tokenMode(sat: sat)
+ result: .completed(decision, …) ◀── the SDK runs the verification
+
+                           webhook: session.completed ◀── final result
+```
+
+1. **Your server** creates the session with your API key and gets back a
+   **session access token** (SAT, prefixed `sat:`).
+2. **Your app** passes only that SAT to the SDK.
+3. The SDK runs the verification and reports the decision. Your server also
+   receives it through webhooks, keyed by the `externalId` you saved in step 1.
+
+Your API key never ships inside your app, and the session is bound to the user
+your server authenticated — not to whatever identifier the device sends.
 
 ---
 
@@ -196,20 +234,15 @@ configuration returns: every string, colour, font and image.
 
 ### Choosing a language
 
-Pass a BCP-47 code to the builder:
+The session carries its language, so choose it **on your server** when you
+create the session — pass `language` in the
+[create-session request](#request-body):
 
-```swift
-let config = try OthentoConfig.Builder()
-    .create(workflowExternalId: "wf_…", clientData: "user-123")
-    .apiKey("pk_sandbox_…")
-    .language("ar")          // optional
-    .build()
+```json
+{ "workflowExternalId": "<WORKFLOW_ID>", "clientData": "user-123", "language": "ar" }
 ```
 
-- **Optional.** Omit it and the tenant default is used — the behaviour every
-  integration had before 0.2.0.
-- **Create mode only.** In token mode the session already carries its own
-  language, minted by your backend, and this value is ignored.
+- **Optional.** Omit it and the tenant default is used.
 - **The backend decides.** Request a language your tenant has no content for
   and it resolves to the tenant default. The SDK renders what came back, not
   what was asked for.
@@ -217,16 +250,170 @@ let config = try OthentoConfig.Builder()
   for example) the whole flow mirrors — navigation, alignment and progress
   direction. You do nothing.
 
-> Matching the SDK to your app's language: pass
+> Matching the SDK to your app's language: send
 > `Locale.current.language.languageCode?.identifier` (iOS 16+) or
-> `Locale.current.languageCode` — but only if your tenant has content for the
+> `Locale.current.languageCode` to your server along with the request, and
+> forward it as `language` — but only if your tenant has content for the
 > languages your app supports, since anything else falls back to the default.
 
 ---
 
-## Quick start
+## Step 1 — Create a session on your server
 
-### SwiftUI — closure API (the one-liner)
+Call this endpoint **from your backend only**, once per verification attempt.
+
+```
+POST https://sdk-api.othento.com/api/v1/SessionToken/session
+X-API-KEY: <your API key>
+Content-Type: application/json
+```
+
+### Request body
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `workflowExternalId` | `String` | yes | The workflow to run, from your dashboard. |
+| `clientData` | `String` | yes | Your identifier for the end user. Take it from **your authenticated session**, never from the app's request body. Echoed in webhooks. |
+| `language` | `String` | optional | BCP-47 code (`"en"`, `"ar"`, …) the flow starts in. Omit for your tenant default. |
+| `callbackUrl` | `String` | optional | Where the user is redirected on completion (if applicable). |
+| `callbackReceiver` | `"Initiator"` / `"Completer"` / `"Both"` | optional | Which party receives the `callbackUrl` redirect. |
+| `metadata` | `String` | optional | Free-form string round-tripped on session events and webhooks. |
+| `expectedDetails` | object | optional | Identity hints compared against the document and selfie. See [Expected details](#expected-details). |
+
+### Response
+
+The response describes the new session. The fields you need:
+
+| Field | Type | Use it for |
+|---|---|---|
+| `sessionToken` | `String` | The session access token (`sat:…`). **Return this to your app** as `sat`. |
+| `externalId` | `String` | The session ID. **Save it on the user record** — webhooks reference it. |
+| `expiresAt` | `String` | ISO-8601 time after which the session can no longer be started. |
+
+### Example — Node.js (Express)
+
+```ts
+app.post('/api/verify-session', requireLogin, async (req, res) => {
+  const response = await fetch('https://sdk-api.othento.com/api/v1/SessionToken/session', {
+    method: 'POST',
+    headers: {
+      'X-API-KEY': process.env.OTHENTO_API_KEY!, // server-side secret
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      workflowExternalId: process.env.OTHENTO_WORKFLOW_ID,
+      clientData: req.user.id, // from YOUR session, not from req.body
+      language: req.user.language,
+    }),
+  });
+
+  if (!response.ok) {
+    return res.status(502).json({ error: 'verification_unavailable' });
+  }
+
+  const session = await response.json();
+  await db.users.update(req.user.id, { othentoSessionId: session.externalId });
+
+  res.json({ sat: session.sessionToken });
+});
+```
+
+### Example — cURL
+
+```bash
+curl -X POST https://sdk-api.othento.com/api/v1/SessionToken/session \
+  -H "X-API-KEY: <your API key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflowExternalId": "<WORKFLOW_ID>",
+    "clientData": "user-123"
+  }'
+```
+
+### Server-side errors
+
+The endpoint uses the same API-key authentication as the Othento REST API, so
+it answers with the same error statuses:
+
+| Status | Meaning | What to do |
+|---|---|---|
+| `400` | A field is missing or invalid. | Check `workflowExternalId`, `clientData`, and field formats. |
+| `401` | Missing or invalid API key. | Check the key and that it belongs to this application. |
+| `402` | No active subscription on your account. | Check billing in your dashboard. |
+| `403` | Application or organization suspended. | Contact your account manager. |
+| `404` | `workflowExternalId` not found for this key. | Check the workflow ID and the environment of the key. |
+
+Don't forward these to the end user as-is — show a generic "verification is
+unavailable, try again" message and log the detail.
+
+### Handling the session access token
+
+- **Create a new session for every attempt.** Don't cache a SAT in the app for
+  a later launch, and never share one between users.
+- **Send it only to the user it was created for**, over HTTPS, as the response
+  to that user's authenticated request.
+- **Don't log it** or send it to analytics or crash reporting. Anyone holding
+  the SAT can open that session until it expires.
+- **If the SDK reports `session_expired`, `session_token_expired` or
+  `session_not_found`**, call your endpoint again for a fresh SAT and start a new
+  SDK instance.
+
+### Expected details
+
+All fields optional — send only what you already know. The backend cross-checks
+them against the data extracted from the document / selfie, so **send each value
+in the exact format below**: a correct value in the wrong format (e.g. a date as
+`"01/01/1988"`, or `"Jordan"` instead of `"JOR"`) will not match.
+
+```json
+{
+  "workflowExternalId": "<WORKFLOW_ID>",
+  "clientData": "user-123",
+  "expectedDetails": {
+    "firstName": "Ahmad",
+    "lastName": "Khalil",
+    "dateOfBirth": "1988-01-01",
+    "gender": "M",
+    "nationality": "JOR",
+    "country": "JOR",
+    "address": "Amman, Jordan",
+    "documentNumber": "A1234567",
+    "ipAddress": "203.0.113.24"
+  }
+}
+```
+
+| Field | Type | What to send | Example |
+|---|---|---|---|
+| `firstName` | `String` | The person's first (given) name, as written on their identity document. | `"Ahmad"` |
+| `lastName` | `String` | The person's last (family) name, as written on their identity document. | `"Khalil"` |
+| `dateOfBirth` | `String` | Date of birth. **Must be `yyyy-MM-dd`**: 4-digit year, 2-digit month, 2-digit day, zero-padded, no time or timezone. | `"1988-01-01"` |
+| `gender` | `String` | **`"M"` or `"F"`** only: one uppercase letter. Do not send `"Male"`, `"female"`, etc. | `"M"` |
+| `nationality` | `String` | The person's nationality as an **ISO 3166-1 alpha-3** country code (3 uppercase letters). | `"JOR"` |
+| `country` | `String` | Country as an **ISO 3166-1 alpha-3** country code (3 uppercase letters). Not a country name or a 2-letter code. | `"JOR"` |
+| `address` | `String` | The person's address as free text. | `"Amman, Jordan"` |
+| `documentNumber` | `String` | The identity document number (passport, national ID, …) exactly as printed, without spaces or dashes you added yourself. | `"A1234567"` |
+| `ipAddress` | `String` | The **IPv4** address you expect the end user's device to connect from, in dotted-decimal form. Send the user's public IP, not your server's. | `"203.0.113.24"` |
+
+Leave a field out rather than sending an empty string or a placeholder such as
+`"N/A"`.
+
+### Sandbox vs production
+
+There is **no environment flag** in the SDK. The API key your server uses
+decides: a sandbox key creates sandbox sessions, a live key creates billable
+production sessions. The SAT carries that environment with it, so the app code
+is identical in both. A sandbox session surfaces a sandbox indicator inside the
+flow UI.
+
+---
+
+## Step 2 — Start the SDK in your app
+
+Fetch a SAT from your server when the user taps "Verify", then start the flow
+with it.
+
+### SwiftUI — closure API
 
 Flip a `Bool`; the SDK owns presentation and hands you one result:
 
@@ -235,16 +422,23 @@ import Othento
 import SwiftUI
 
 struct VerifyButton: View {
+    // Built from a fresh SAT each time the user taps "Verify".
+    @State private var config: OthentoConfig?
     @State private var showVerification = false
 
-    private let config = try! OthentoConfig.Builder()
-        .create(workflowExternalId: "<WORKFLOW_ID>", clientData: "user-123")
-        .apiKey("<pk_sandbox_… or pk_live_…>")
-        .build()
-
     var body: some View {
-        Button("Verify identity") { showVerification = true }
-            .othentoVerification(isPresented: $showVerification, config: config) { result in
+        let button = Button("Verify identity") {
+            Task {
+                let sat = try await MyBackend.createVerificationSession() // returns "sat:…"
+                config = try OthentoConfig.Builder()
+                    .tokenMode(sat: sat)
+                    .build()
+                showVerification = true
+            }
+        }
+
+        if let config {
+            button.othentoVerification(isPresented: $showVerification, config: config) { result in
                 switch result {
                 case let .completed(decision, externalId):
                     print("decision:", decision, "session:", externalId)
@@ -254,19 +448,23 @@ struct VerifyButton: View {
                     print("failed:", error.code, "—", message)
                 }
             }
+        } else {
+            button
+        }
     }
 }
 ```
 
 ### Listener API (SwiftUI or UIKit)
 
-Implement `OthentoSDKListener` for the full lifecycle (ready / session-created /
-status changes), and present via SwiftUI or UIKit:
+Implement `OthentoSDKListener` for the full lifecycle (ready / status changes),
+and present via SwiftUI or UIKit:
 
 ```swift
+let sat = try await MyBackend.createVerificationSession()
+
 let config = try OthentoConfig.Builder()
-    .create(workflowExternalId: "<WORKFLOW_ID>", clientData: "user-123")
-    .apiKey("<pk_sandbox_… or pk_live_…>")
+    .tokenMode(sat: sat)
     .build()
 
 let sdk = OthentoSDK(config: config, listener: self)   // self: OthentoSDKListener
@@ -282,7 +480,7 @@ present(sdk.viewController(), animated: true)
 extension MyVerificationCoordinator: OthentoSDKListener {
     func onReady() {}
     func onSessionCreated(externalId: String, sessionUrl: String) {
-        // Persist externalId against your user record for webhook correlation.
+        // Same externalId your server saved in Step 1.
     }
     func onStatusChanged(_ status: OthentoSessionStatus) {}
     func onCompleted(decision: OthentoDecision, externalId: String) {
@@ -299,11 +497,9 @@ extension MyVerificationCoordinator: OthentoSDKListener {
 > keep a strong reference to your listener (and to the `OthentoSDK` instance) for
 > the duration of the flow. The closure API handles this for you.
 
-### Sandbox vs production
-
-There is **no environment flag**. The API-key prefix decides: `pk_sandbox_…`
-hits the test environment, `pk_live_…` bills real verifications — same SDK build.
-A sandbox key surfaces a sandbox indicator inside the flow UI.
+> **Treat the in-app result as a UI signal, not proof.** Update your records
+> from the webhook your server receives (or by looking the session up
+> server-side), not from a value reported by the device.
 
 ---
 
@@ -314,33 +510,43 @@ import Othento
 import SwiftUI
 
 struct ContentView: View {
+    @State private var config: OthentoConfig?
     @State private var showVerification = false
     @State private var outcome = "—"
 
-    private var config: OthentoConfig {
-        // Configuration is validated synchronously; handle the throw in real code.
-        try! OthentoConfig.Builder()
-            .create(workflowExternalId: "<WORKFLOW_ID>", clientData: "user-123")
-            .apiKey("<pk_sandbox_…>")
-            .expectedDetails(OthentoExpectedDetails(dateOfBirth: "1990-04-23"))
-            .build()
-    }
-
     var body: some View {
-        VStack(spacing: 16) {
+        let content = VStack(spacing: 16) {
             Text("Status: \(outcome)")
-            Button("Verify identity") { showVerification = true }
+            Button("Verify identity") { Task { await startVerification() } }
                 .buttonStyle(.borderedProminent)
         }
-        .othentoVerification(isPresented: $showVerification, config: config) { result in
-            switch result {
-            case let .completed(decision, externalId):
-                outcome = "completed \(decision.rawValue) (\(externalId))"
-            case let .cancelled(reason):
-                outcome = "cancelled (\(reason.rawValue))"
-            case let .failed(error, message):
-                outcome = "failed \(error.code): \(message)"
+
+        if let config {
+            content.othentoVerification(isPresented: $showVerification, config: config) { result in
+                switch result {
+                case let .completed(decision, externalId):
+                    outcome = "completed \(decision.rawValue) (\(externalId))"
+                case let .cancelled(reason):
+                    outcome = "cancelled (\(reason.rawValue))"
+                case let .failed(error, message):
+                    outcome = "failed \(error.code): \(message)"
+                }
             }
+        } else {
+            content
+        }
+    }
+
+    private func startVerification() async {
+        do {
+            // Your endpoint from Step 1 — it creates the session with your API key.
+            let sat = try await MyBackend.createVerificationSession()
+            config = try OthentoConfig.Builder()
+                .tokenMode(sat: sat)
+                .build()
+            showVerification = true
+        } catch {
+            outcome = "could not start: \(error.localizedDescription)"
         }
     }
 }
@@ -356,57 +562,17 @@ Build an `OthentoConfig` with the fluent `Builder`. Configuration is validated
 
 | Method | Required | Purpose |
 |---|---|---|
-| `create(workflowExternalId:clientData:)` | ✅ (create mode) | The workflow id + your end-user identifier. |
-| `apiKey(_:)` | ✅ (create mode) | Public API key (`pk_sandbox_…` / `pk_live_…`). |
-| `tokenMode(sat:)` | ✅ (token mode) | A backend-minted session access token; use *instead of* `create`/`apiKey`. |
-| `callbackUrl(_:)` | optional | Redirect URL forwarded to the create-session call. |
-| `callbackReceiver(_:)` | optional | Which webhook the platform invokes: `.initiator` / `.completer` / `.both`. |
-| `metadata(_:)` | optional | Free-form string round-tripped on session events / webhooks. |
-| `expectedDetails(_:)` | optional | Identity hints cross-checked against extracted data (see below). |
-| `language(_:)` | optional | BCP-47 UI language, e.g. `"en"` / `"ar"`. **Create mode only** — ignored in token mode. Omit for the tenant default. See [Localisation & branding](#localisation--branding). |
+| `tokenMode(sat:)` | ✅ | The `sessionToken` your server received in [Step 1](#step-1--create-a-session-on-your-server). |
 
 ```swift
-// Token mode — when your backend creates the session and mints a token:
 let config = try OthentoConfig.Builder()
     .tokenMode(sat: "<session-access-token>")
     .build()
 ```
 
-### `OthentoExpectedDetails`
-
-All fields optional — send only what you already know. The backend cross-checks
-them against the data extracted from the document / selfie, so **send each value
-in the exact format below**: a correct value in the wrong format (e.g. a date as
-`"01/01/1988"`, or `"Jordan"` instead of `"JOR"`) will not match.
-
-```swift
-OthentoExpectedDetails(
-    firstName: "Ahmad",
-    lastName: "Khalil",
-    dateOfBirth: "1988-01-01",   // must be yyyy-MM-dd
-    gender: "M",                 // "M" or "F"
-    nationality: "JOR",          // ISO 3166-1 alpha-3
-    country: "JOR",              // ISO 3166-1 alpha-3
-    address: "Amman, Jordan",
-    documentNumber: "A1234567",
-    ipAddress: "203.0.113.24"    // expected end-user IPv4
-)
-```
-
-| Field | Type | What to send | Example |
-|---|---|---|---|
-| `firstName` | `String?` | The person's first (given) name, as written on their identity document. | `"Ahmad"` |
-| `lastName` | `String?` | The person's last (family) name, as written on their identity document. | `"Khalil"` |
-| `dateOfBirth` | `String?` | Date of birth. **Must be `yyyy-MM-dd`**: 4-digit year, 2-digit month, 2-digit day, zero-padded, no time or timezone. | `"1988-01-01"` |
-| `gender` | `String?` | **`"M"` or `"F"`** only: one uppercase letter. Do not send `"Male"`, `"female"`, etc. | `"M"` |
-| `nationality` | `String?` | The person's nationality as an **ISO 3166-1 alpha-3** country code (3 uppercase letters). | `"JOR"` |
-| `country` | `String?` | Country as an **ISO 3166-1 alpha-3** country code (3 uppercase letters). Not a country name or a 2-letter code. | `"JOR"` |
-| `address` | `String?` | The person's address as free text. | `"Amman, Jordan"` |
-| `documentNumber` | `String?` | The identity document number (passport, national ID, …) exactly as printed, without spaces or dashes you added yourself. | `"A1234567"` |
-| `ipAddress` | `String?` | The **IPv4** address you expect the end user's device to connect from, in dotted-decimal form. Send the user's public IP, not your server's. | `"203.0.113.24"` |
-
-Leave a field `nil` rather than sending an empty string or a placeholder such as
-`"N/A"`.
+Everything about the session itself — workflow, user, language, callback URL,
+metadata, expected details — is set **on your server** when you create it. See
+[Request body](#request-body).
 
 ---
 
@@ -448,7 +614,7 @@ All callbacks are dispatched on the **main actor**.
 | Callback | When it fires |
 |---|---|
 | `onReady()` | SDK is up. Fires once, before any other event. |
-| `onSessionCreated(externalId:sessionUrl:)` | A new session was minted. Save `externalId` against your user record. |
+| `onSessionCreated(externalId:sessionUrl:)` | The session loaded and has not finished yet. `externalId` is the one your server saved in Step 1. |
 | `onStatusChanged(_:)` | Session status transitioned. Deduplicated — never the same status twice in a row. |
 | `onCompleted(decision:externalId:)` | Terminal decision reached: `.approved`, `.declined`, or `.inReview`. |
 | `onCancelled(reason:)` | User dismissed, host called `destroy()`, or the SDK cancelled before a terminal status. |
@@ -493,19 +659,15 @@ case (or `code`) for exhaustive handling.
 
 | `code` | Meaning | Recommended action |
 |---|---|---|
-| `config_invalid` | Required field missing/malformed (thrown sync from `build()`). | Fix at build time. |
-| `missing_api_key` | No `apiKey`. | Provide the public API key. |
-| `missing_workflow` | No `workflowExternalId`. | Provide the workflow ID. |
-| `missing_client_data` | No `clientData`. | Pass your end-user identifier. |
-| `session_not_found` | Session id didn't resolve (HTTP 404). | Start a fresh session. |
-| `session_expired` | The session is past its validity window. | Start a fresh session. |
-| `session_token_expired` | A token-mode SAT/ST expired. | Mint a new token from your backend. |
-| `session_failed` | The session ended in a non-recoverable failure. | Start a fresh session. |
+| `config_invalid` | Required field missing/malformed — for example an empty `sat` (thrown sync from `build()`). | Fix at build time. |
+| `session_not_found` | The SAT didn't resolve to a session (HTTP 404). | Check the SAT was passed unmodified; request a new one from your server. |
+| `session_expired` | The session is past its validity window. | Request a new SAT from your server. |
+| `session_token_expired` | The SAT or the session token derived from it expired. | Request a new SAT from your server. |
+| `session_failed` | The session ended in a non-recoverable failure. | Request a new SAT from your server. |
 | `camera_permission_denied` | Camera access was denied. | Guide the user to Settings to enable it. |
 | `network` | Connectivity / DNS / TLS failure. | Retry. |
-| `create_failed` | Session could not be created. | Verify `apiKey` + `workflowExternalId`. |
 | `documents_failed` | Document list/processing failed. | Prompt retry with better lighting. |
-| `initiate_failed` | Flow failed to start after session creation. | Retry on a fresh instance. |
+| `initiate_failed` | Flow failed to start. | Retry on a fresh instance. |
 | `upload_failed` | Evidence upload failed; `error.stage` says which step (`UploadUrl` / `S3Put` / `ConfirmUpload`). | Retry; check connectivity. |
 | `poll_failed` | Polling for the result failed. | Retry; the session may still resolve. |
 | `file_too_large` | Picked file exceeded the upload limit (> 10 MB). | Prompt the user to retry capture. |
@@ -516,8 +678,8 @@ case (or `code`) for exhaustive handling.
 func onError(_ error: OthentoError, displayMessage: String) {
     switch error {
     case .network:           showRetry()
-    case .sessionNotFound:   restartSession()
-    case .uploadFailed:      showRetry()          // error.stage available
+    case .sessionNotFound:   restartWithNewSession()   // fetch a fresh SAT
+    case .uploadFailed:      showRetry()               // error.stage available
     default:                 showGeneric(displayMessage)
     }
 }
@@ -541,19 +703,26 @@ func onError(_ error: OthentoError, displayMessage: String) {
 
 A healthy integration produces, in order:
 
-1. `onReady` shortly after `start()`.
-2. `onSessionCreated` with a non-empty `externalId`.
-3. `onStatusChanged(.inProgress)` at least once.
-4. Exactly one terminal callback (or one `OthentoResult`).
+1. Your server endpoint returns a `sat` beginning with `sat:` and stores the
+   session's `externalId` on the user.
+2. `onReady` shortly after `start()`.
+3. `onSessionCreated` with the same `externalId`.
+4. `onStatusChanged(.inProgress)` at least once.
+5. Exactly one terminal callback (or one `OthentoResult`).
+6. Your webhook endpoint receives the final session event for the same
+   `externalId`.
 
 Use the sandbox test documents from your dashboard to exercise approved /
 declined / in-review paths deterministically.
 
-- [ ] Sandbox key in place; the flow launches and `onReady` fires
+- [ ] Server creates sessions with the **sandbox** API key; no API key anywhere in the app target
+- [ ] `clientData` comes from the logged-in user on the server, not from the app's request body
+- [ ] The flow launches and `onReady` fires
 - [ ] Approved-path document → `onCompleted(.approved)`
 - [ ] Declined-path document → `onCompleted(.declined)`
 - [ ] In-review document → `onCompleted(.inReview)`
 - [ ] Swipe the sheet down mid-flow → `onCancelled(.swipeDismiss)`
+- [ ] An expired SAT → `onError`, handled by fetching a new one
 
 > The iOS Simulator camera is a static image and Vision/AVFoundation behave
 > differently there — run capture and liveness on a **real device**.
@@ -566,7 +735,10 @@ declined / in-review paths deterministically.
 |---|---|---|
 | App terminates when the camera opens | Missing `NSCameraUsageDescription`. | Add it to your Info.plist (see [Permissions](#permissions)). |
 | SPM error: checksum mismatch | Stale package cache or a re-uploaded asset. | File ▸ Packages ▸ Reset Package Caches, then re-resolve. |
-| `onError(create_failed)` immediately | Wrong/expired `apiKey` or `workflowExternalId`. | Verify credentials and that the key matches the environment. |
+| Your server gets `401` from `/SessionToken/session` | Missing or wrong `X-API-KEY`, or a key from a different application. | Check the key your server sends and the application it belongs to. |
+| `build()` throws `config_invalid` | `sat` is empty — usually the server response was read with the wrong field name. | Return `session.sessionToken` from your server and pass it as `sat`. |
+| `onError(session_not_found)` right after launch | The SAT was altered (trimmed, re-encoded) or belongs to a different environment. | Pass the token exactly as received; make sure the server used the intended key. |
+| `onError(session_expired)` / `session_token_expired` | The SAT was created too long before the user started. | Create the session when the user taps "Verify", not at app launch. |
 | Camera screen never appears | Camera permission permanently denied. | The SDK shows an "Open Settings" path; the user must grant it. |
 | No result is ever delivered | The listener (or SDK) was deallocated mid-flow. | Hold a strong reference to both, or use the closure API. |
 

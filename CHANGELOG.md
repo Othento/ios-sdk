@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Token mode is now the documented integration** (README update,
+  2026-09-16). The README explains how to create a session on your server with
+  `POST /api/v1/SessionToken/session` and start the SDK with
+  `OthentoConfig.Builder().tokenMode(sat:)`, so your API key never ships inside
+  your app. Create mode is no longer documented; it keeps working for existing
+  integrations. No SDK code changes.
+
 - **`OthentoExpectedDetails` field formats.** The README now documents what to
   send for every field — `dateOfBirth` as `yyyy-MM-dd`, `gender` as `"M"` /
   `"F"`, `nationality` and `country` as ISO 3166-1 alpha-3 codes, and
