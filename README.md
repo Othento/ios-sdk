@@ -12,8 +12,8 @@ error codes, session statuses, and webhook payloads line up across platforms.
 - **Min iOS:** 15.0 · **Xcode:** 15+ · **Swift:** 5.9+
 - **UI:** renders with SwiftUI internally — your app can be **UIKit or SwiftUI**.
 - **Distribution:** a prebuilt `XCFramework`. You add **one** package and
-  `import Othento`; SPM resolves the two AWS packages behind Face Liveness for
-  you (see [Install](#install)).
+  `import Othento`; SPM resolves the two extra packages active liveness needs
+  for you (see [Install](#install)).
 - **Copy, branding and language are served by your backend** — see
   [Localisation & branding](#localisation--branding).
 
@@ -28,23 +28,24 @@ error codes, session statuses, and webhook payloads line up across platforms.
 2. [How it works](#how-it-works)
 3. [Permissions](#permissions)
 4. [Install](#install)
-5. [AWS Rekognition Face Liveness](#aws-rekognition-face-liveness)
+5. [Active liveness](#active-liveness)
 6. [Localisation & branding](#localisation--branding)
 7. [Step 1 — Create a session on your server](#step-1--create-a-session-on-your-server)
 8. [Step 2 — Start the SDK in your app](#step-2--start-the-sdk-in-your-app)
 9. [Complete example](#complete-example)
 10. [Configuration reference](#configuration-reference)
-11. [Presenting & dismissing](#presenting--dismissing)
-12. [Lifecycle & callbacks](#lifecycle--callbacks)
-13. [Result type](#result-type)
-14. [Status & decision values](#status--decision-values)
-15. [Error codes](#error-codes)
-16. [Cancellation reasons](#cancellation-reasons)
-17. [Testing your integration](#testing-your-integration)
-18. [Troubleshooting](#troubleshooting)
-19. [Versioning](#versioning)
-20. [Support](#support)
-21. [License](#license)
+11. [Dedicated and on-premises deployments](#dedicated-and-on-premises-deployments)
+12. [Presenting & dismissing](#presenting--dismissing)
+13. [Lifecycle & callbacks](#lifecycle--callbacks)
+14. [Result type](#result-type)
+15. [Status & decision values](#status--decision-values)
+16. [Error codes](#error-codes)
+17. [Cancellation reasons](#cancellation-reasons)
+18. [Testing your integration](#testing-your-integration)
+19. [Troubleshooting](#troubleshooting)
+20. [Versioning](#versioning)
+21. [Support](#support)
+22. [License](#license)
 
 ---
 
@@ -157,10 +158,10 @@ targets: [
 SPM downloads the prebuilt XCFramework from the GitHub Release and verifies it
 against the manifest's SHA-256 checksum at resolution time.
 
-You add one package. SPM then resolves two transitive AWS packages
+You add one package. SPM then resolves two transitive packages
 (`amplify-ui-swift-liveness` and `amplify-swift`), which the SDK needs for
-Rekognition Face Liveness — see below. **The first resolve is slow**; Amplify is
-a large repository.
+[active liveness](#active-liveness). **The first resolve is slow**: they are
+large repositories.
 
 ### CocoaPods
 
@@ -169,17 +170,18 @@ withdrawn. Integrate via Swift Package Manager (above).
 
 ---
 
-## AWS Rekognition Face Liveness
+## Active liveness
 
-If your workflow's `face_liveness_method` is `rekognition_light` or
-`rekognition_movement`, the SDK runs an **active** liveness challenge using
-AWS's Face Liveness component instead of the passive video check.
+If your workflow's liveness method is **Active - Face + Light** or **Active -
+Face Movement**, the SDK runs an **active** liveness challenge instead of the
+passive video check.
 
-**You do not configure anything.** There is no AWS account to connect, no
-Cognito Identity Pool, no keys or identifiers to embed. The SDK renders its own
-branded intro (plus a photosensitivity warning before the light challenge), and
-the challenge streams to AWS using short-lived credentials your backend vends
-per attempt. The pass/fail decision stays server-side.
+**You do not configure anything.** There is no cloud account to connect and no
+keys or identifiers to embed. The SDK renders its own branded intro (plus a
+photosensitivity warning before the light challenge). The challenge itself is
+run by a third-party cloud liveness service: the face video streams to it from
+the device using short-lived credentials the Othento backend issues for each
+attempt. The pass/fail decision stays server-side.
 
 **Requirements**
 
@@ -196,20 +198,20 @@ per attempt. The pass/fail decision stays server-side.
   aggregates that with your app's manifest, but **App Store privacy labels are
   set per-app** — your submission must declare the same categories, and must
   match whatever your backend retains.
-- **Export compliance.** The liveness path links s2n-tls / aws-lc for TLS
-  transport only. Standard cryptography, so the usual Category 5 Part 2
-  exemption applies — set `ITSAppUsesNonExemptEncryption` deliberately rather
-  than answering the TestFlight prompt each upload.
-- Your backend must expose
-  `GET /api/v1/SessionToken/session/liveness/rekognition/credentials`. If you
-  run the standard Othento backend this is already in place.
+- **Export compliance.** The liveness module links an additional TLS library,
+  used for transport encryption only. That is standard cryptography, so the
+  usual Category 5 Part 2 exemption applies — set
+  `ITSAppUsesNonExemptEncryption` deliberately rather than answering the
+  TestFlight prompt each upload.
+- **Nothing to add on your server.** The SDK fetches each attempt's
+  credentials from the Othento SDK API itself.
 
 **Behaviour**
 
 - The user gets up to **3 attempts**. Closing the check (×) returns to the
   intro without consuming the step.
-- The AWS challenge screen's layout is fixed by AWS. The SDK brands the intro;
-  the challenge itself is not themeable beyond what AWS exposes.
+- The SDK brands the intro screens. The challenge screen's layout comes from
+  the liveness service and can't be themed.
 
 ---
 
@@ -362,8 +364,10 @@ unavailable, try again" message and log the detail.
 
 All fields optional — send only what you already know. The backend cross-checks
 them against the data extracted from the document / selfie, so **send each value
-in the exact format below**: a correct value in the wrong format (e.g. a date as
-`"01/01/1988"`, or `"Jordan"` instead of `"JOR"`) will not match.
+in the exact format below**. A `dateOfBirth` or `gender` in any other format
+(e.g. `"01/01/1988"` or `"Male"`) is rejected: the create-session call fails with
+`400`. Any other field in the wrong format (e.g. `"Jordan"` instead of `"JOR"`)
+will not match.
 
 ```json
 {
@@ -404,7 +408,8 @@ There is **no environment flag** in the SDK. The API key your server uses
 decides: a sandbox key creates sandbox sessions, a live key creates billable
 production sessions. The SAT carries that environment with it, so the app code
 is identical in both. A sandbox session surfaces a sandbox indicator inside the
-flow UI.
+flow UI, and always finishes **Approved**; see
+[Testing your integration](#testing-your-integration).
 
 ---
 
@@ -563,6 +568,7 @@ Build an `OthentoConfig` with the fluent `Builder`. Configuration is validated
 | Method | Required | Purpose |
 |---|---|---|
 | `tokenMode(sat:)` | ✅ | The `sessionToken` your server received in [Step 1](#step-1--create-a-session-on-your-server). |
+| `apiBaseUrl(_:)` | optional (default `https://sdk-api.othento.com`) | Dedicated-cloud and on-premises deployments only. See [Dedicated and on-premises deployments](#dedicated-and-on-premises-deployments). |
 
 ```swift
 let config = try OthentoConfig.Builder()
@@ -573,6 +579,40 @@ let config = try OthentoConfig.Builder()
 Everything about the session itself — workflow, user, language, callback URL,
 metadata, expected details — is set **on your server** when you create it. See
 [Request body](#request-body).
+
+---
+
+## Dedicated and on-premises deployments
+
+If you use Othento's hosted service, skip this section: the SDK already points
+at it.
+
+With a dedicated-cloud or on-premises deployment, the SDK API runs on a host
+your deployment provides. Pass that origin, as Othento gave it to you, to
+`apiBaseUrl(_:)`:
+
+```swift
+let config = try OthentoConfig.Builder()
+    .tokenMode(sat: sat)
+    .apiBaseUrl("https://kyc-api.your-bank.example") // from your app's own configuration
+    .build()
+```
+
+- **It is the SDK API host**, the same host your server creates sessions
+  against in [Step 1](#step-1--create-a-session-on-your-server) (instead of
+  `sdk-api.othento.com`).
+- **An https origin only:** `https://`, a host name or IPv4 address, and an
+  optional port, such as `https://kyc-api.your-bank.example:8443`. A path,
+  query, fragment, credentials, an IPv6 literal, `http://`, or a blank string
+  makes `build()` throw `OthentoConfigError` (`config_invalid`). Write
+  international domain names in their `xn--` form.
+- **It never falls back.** A blank or invalid value throws; the SDK does not
+  quietly switch to Othento's hosted service. Once set, the SDK sends the
+  session's access tokens only to that host.
+- **Set it from your app's own build or configuration**, never from user input
+  or a deep link.
+- App Transport Security applies as usual: the host needs a certificate that
+  iOS trusts. Don't add ATS exceptions for it.
 
 ---
 
@@ -668,7 +708,7 @@ case (or `code`) for exhaustive handling.
 | `network` | Connectivity / DNS / TLS failure. | Retry. |
 | `documents_failed` | Document list/processing failed. | Prompt retry with better lighting. |
 | `initiate_failed` | Flow failed to start. | Retry on a fresh instance. |
-| `upload_failed` | Evidence upload failed; `error.stage` says which step (`UploadUrl` / `S3Put` / `ConfirmUpload`). | Retry; check connectivity. |
+| `upload_failed` | Evidence upload failed; the associated `stage` in `.uploadFailed(stage:httpStatus:)` says which step: `.uploadUrl` (requesting the upload URL), `.s3Put` (uploading the file itself) or `.confirmUpload` (confirming the upload). | Retry; check connectivity. |
 | `poll_failed` | Polling for the result failed. | Retry; the session may still resolve. |
 | `file_too_large` | Picked file exceeded the upload limit (> 10 MB). | Prompt the user to retry capture. |
 | `cancelled` | The operation was cancelled. | No action; surfaces via `onCancelled`. |
@@ -712,15 +752,17 @@ A healthy integration produces, in order:
 6. Your webhook endpoint receives the final session event for the same
    `externalId`.
 
-Use the sandbox test documents from your dashboard to exercise approved /
-declined / in-review paths deterministically.
+Sandbox sessions always finish **Approved**, so use them to prove the
+integration end to end. Declined and In-review outcomes can't be produced in
+sandbox: cover that handling with your own tests (call your `onCompleted`
+handling with `.declined` and `.inReview` directly) and confirm it once in
+production.
 
 - [ ] Server creates sessions with the **sandbox** API key; no API key anywhere in the app target
 - [ ] `clientData` comes from the logged-in user on the server, not from the app's request body
 - [ ] The flow launches and `onReady` fires
-- [ ] Approved-path document → `onCompleted(.approved)`
-- [ ] Declined-path document → `onCompleted(.declined)`
-- [ ] In-review document → `onCompleted(.inReview)`
+- [ ] A completed sandbox session → `onCompleted(.approved)`
+- [ ] Your `.declined` and `.inReview` handling is covered by your own tests
 - [ ] Swipe the sheet down mid-flow → `onCancelled(.swipeDismiss)`
 - [ ] An expired SAT → `onError`, handled by fetching a new one
 
@@ -736,7 +778,7 @@ declined / in-review paths deterministically.
 | App terminates when the camera opens | Missing `NSCameraUsageDescription`. | Add it to your Info.plist (see [Permissions](#permissions)). |
 | SPM error: checksum mismatch | Stale package cache or a re-uploaded asset. | File ▸ Packages ▸ Reset Package Caches, then re-resolve. |
 | Your server gets `401` from `/SessionToken/session` | Missing or wrong `X-API-KEY`, or a key from a different application. | Check the key your server sends and the application it belongs to. |
-| `build()` throws `config_invalid` | `sat` is empty — usually the server response was read with the wrong field name. | Return `session.sessionToken` from your server and pass it as `sat`. |
+| `build()` throws `config_invalid` | `sat` is empty — usually the server response was read with the wrong field name. Or, on a dedicated/on-premises deployment, `apiBaseUrl` is blank or not a bare https origin. | Return `session.sessionToken` from your server and pass it as `sat`. Check `apiBaseUrl` against [the rules](#dedicated-and-on-premises-deployments). |
 | `onError(session_not_found)` right after launch | The SAT was altered (trimmed, re-encoded) or belongs to a different environment. | Pass the token exactly as received; make sure the server used the intended key. |
 | `onError(session_expired)` / `session_token_expired` | The SAT was created too long before the user started. | Create the session when the user taps "Verify", not at app launch. |
 | Camera screen never appears | Camera permission permanently denied. | The SDK shows an "Open Settings" path; the user must grant it. |

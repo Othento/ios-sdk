@@ -5,6 +5,30 @@ All notable changes to the Othento iOS SDK are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-05
+
+### Added
+
+- **`OthentoConfig.Builder.apiBaseUrl(_:)` for dedicated-cloud and
+  on-premises deployments.** Points the SDK at your deployment's SDK API
+  instead of `https://sdk-api.othento.com`. It must be an https origin (host
+  and optional port, no path); a blank or invalid value makes `build()` throw
+  `OthentoConfigError` (`config_invalid`) rather than falling back to the
+  hosted service. Omit it and nothing changes. See "Dedicated and on-premises
+  deployments" in the README.
+
+### Removed
+
+- The undocumented `OTHENTO_INTERNAL_BASE_URL` environment variable. Use
+  `apiBaseUrl(_:)` instead.
+
+### Documentation
+
+- Sandbox sessions always finish Approved; the README no longer promises test
+  documents for the Declined and In-review outcomes.
+- A `dateOfBirth` or `gender` in the wrong format is rejected with `400` when the
+  session is created; the README previously said they would not match.
+
 ## [0.2.1] - 2026-09-14
 
 ### Changed
@@ -78,14 +102,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ignored. The backend has the final say; ask for a language the tenant has no
   content for and it resolves to the tenant default.
 
-- **AWS Rekognition Face Liveness**, as an opt-in alternative to the existing
-  passive liveness-video check. A workflow configured for `rekognition_light`
-  or `rekognition_movement` now runs an active liveness challenge. The SDK
-  renders its own branded intro (and a photosensitivity warning before the
-  light challenge); the challenge itself is AWS's component. Credentials are
-  short-lived STS credentials vended per attempt by your backend — the SDK
-  embeds no AWS identifier beyond the region. Up to 3 attempts; the backend
-  still owns the pass/fail decision.
+- **Active liveness**, as an opt-in alternative to the existing passive
+  liveness-video check. A workflow whose liveness method is **Active - Face +
+  Light** or **Active - Face Movement** now runs an active liveness challenge.
+  The SDK renders its own branded intro (and a photosensitivity warning before
+  the light challenge); the challenge itself is run by a third-party cloud
+  liveness service. Credentials are short-lived and issued per attempt by the
+  Othento backend — the SDK embeds no cloud identifier beyond the region. Up to
+  3 attempts; the backend still owns the pass/fail decision.
 
 - **"Update Required" screen.** A session that asks for a verification step
   this build cannot render now shows an explicit dead-end instead of silently
@@ -95,17 +119,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lists are now type-to-filter, matching on country name and dialling code.
   Previously they were a plain scroll — unusable at ~200 entries.
 
-- **`rekognitionLiveness` fixture scenario**, for exercising the Rekognition
-  intro and photosensitivity screens without a backend. The AWS challenge
-  itself still needs a real one.
+- **`rekognitionLiveness` fixture scenario**, for exercising the active-liveness
+  intro and photosensitivity screens without a backend. The challenge itself
+  still needs a real one.
 
 ### Changed
 
 - **SPM integrators now resolve two transitive packages.** `Othento` depends on
   `aws-amplify/amplify-ui-swift-liveness` (pinned exactly `1.4.0`) and
   `aws-amplify/amplify-swift` (pinned exactly `2.49.0`). You still add a single
-  package in Xcode; SPM resolves the rest. The first resolve is slow — Amplify
-  is a large graph.
+  package in Xcode; SPM resolves the rest. The first resolve is slow — it is a
+  large dependency graph.
 
   These pins are deliberately **not** the newest. Liveness `1.4.5` /
   amplify-swift `2.58.5` use `@preconcurrency` on a protocol conformance, which
@@ -133,19 +157,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known limitations
 
-- **CocoaPods does not carry Rekognition liveness.**
-  `amplify-ui-swift-liveness` publishes no podspec
-  ([#110](https://github.com/aws-amplify/amplify-ui-swift-liveness/issues/110)),
-  so the CocoaPods artifact is built without it. A Rekognition workflow reaching
-  a CocoaPods integrator lands on the "Update Required" screen. Passive
-  liveness, document capture and OTP are unaffected. **Use SPM if your
-  workflows use Rekognition liveness.**
+- **CocoaPods does not carry active liveness.**
+  `amplify-ui-swift-liveness` publishes no podspec, so the CocoaPods artifact
+  is built without it. An active-liveness workflow reaching a CocoaPods
+  integrator lands on the "Update Required" screen. Passive liveness, document
+  capture and OTP are unaffected. **Use SPM if your workflows use active
+  liveness.**
 
   The CocoaPods spec therefore stays at **0.1.1** for this release. There is no
   `0.2.0` pod.
 
-- **The artifact is substantially larger for SPM integrators.** Rekognition
-  statically links the AWS Amplify stack: the device slice binary goes from
+- **The artifact is substantially larger for SPM integrators.** Active
+  liveness statically links its cloud client stack: the device slice binary goes from
   **4.5 MiB to 25.2 MiB** (+20.7 MiB), and the release zip from 5.9 MiB to
   26.3 MiB. That is the unstripped framework, not your app's growth — the
   linker dead-strips and the App Store thins per-device — but measure it with
@@ -186,4 +209,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   required.
 - Minimum deployment target: iOS 15.
 
+[0.3.0]: https://github.com/Othento/ios-sdk/releases/tag/0.3.0
 [0.2.1]: https://github.com/Othento/ios-sdk/releases/tag/0.2.1
