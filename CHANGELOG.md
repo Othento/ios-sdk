@@ -5,7 +5,15 @@ All notable changes to the Othento iOS SDK are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2026-11-05
+## [0.3.0] - 2026-11-06
+
+### Fixed
+
+- **`import Othento` failed to compile in Swift Package Manager projects**, with
+  `no such module 'AWSPluginsCore'` or `missing required modules: 'AwsCAuth', …`
+  (reproduced on 0.2.1 with Xcode 15.4). The framework's public interface
+  imported two internal dependencies; it no longer does. No code changes are
+  needed on your side.
 
 ### Added
 

@@ -8,7 +8,7 @@ verification, and hands you a typed decision (`Approved` / `Declined` /
 `InReview`). The API surface mirrors the Othento web and Android SDKs 1:1, so
 error codes, session statuses, and webhook payloads line up across platforms.
 
-- **Swift Package:** `https://github.com/Othento/ios-sdk` · pin `0.2.1`
+- **Swift Package:** `https://github.com/Othento/ios-sdk` · pin `0.3.0`
 - **Min iOS:** 15.0 · **Xcode:** 15+ · **Swift:** 5.9+
 - **UI:** renders with SwiftUI internally — your app can be **UIKit or SwiftUI**.
 - **Distribution:** a prebuilt `XCFramework`. You add **one** package and
@@ -139,13 +139,13 @@ Notes:
 ### Swift Package Manager (recommended)
 
 In Xcode: **File ▸ Add Package Dependencies…**, enter
-`https://github.com/Othento/ios-sdk`, and pin to **Exact Version `0.2.1`**.
+`https://github.com/Othento/ios-sdk`, and pin to **Exact Version `0.3.0`**.
 
 Or in a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Othento/ios-sdk", from: "0.2.1"),
+    .package(url: "https://github.com/Othento/ios-sdk", from: "0.3.0"),
 ],
 targets: [
     .target(
@@ -796,7 +796,7 @@ production.**
 
 ## Support
 
-Include the SDK version (`0.2.1`), the `externalId` of the affected session, and
+Include the SDK version (`0.3.0`), the `externalId` of the affected session, and
 a console capture when contacting your account manager or opening a ticket.
 
 ---

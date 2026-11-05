@@ -52,8 +52,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "OthentoBinary",
-            url: "https://github.com/Othento/ios-sdk/releases/download/0.2.1/Othento.xcframework.zip",
-            checksum: "36ac1d4c530b8bcd9be415be4bec7af5335a41adc28f3cd15cdb26ff76f25290"
+            url: "https://github.com/Othento/ios-sdk/releases/download/0.3.0/Othento.xcframework.zip",
+            checksum: "d65593ec040e94f24537da7ed8280fea42bc996c9a863a1433c1dd6a67a13f09"
         ),
         .target(
             name: "OthentoLink",
